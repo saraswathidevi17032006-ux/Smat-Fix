@@ -74,6 +74,23 @@ export function getCurrentUser() {
 }
 
 /**
+ * Submit a new problem report (POST /api/reports).
+ */
+export function createReport({ category, title, location, description, priority }) {
+  return apiRequest('/api/reports', {
+    method: 'POST',
+    body: JSON.stringify({ category, title, location, description, priority }),
+  })
+}
+
+/**
+ * Fetch the authenticated user's submitted problem reports (GET /api/reports/my).
+ */
+export function getMyReports() {
+  return apiRequest('/api/reports/my')
+}
+
+/**
  * Save auth token and user data to storage.
  * Uses localStorage for "remember me" or sessionStorage for session-only.
  */

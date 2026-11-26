@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { loginUser } from './api/apiClient.js'
+import { Link, useNavigate } from 'react-router-dom'
+import { loginUser, saveAuthData } from './api/apiClient.js'
 import './Login.css'
 
 // Maintenance-themed SVG illustration for the left branding panel
@@ -97,6 +97,7 @@ function MaintenanceIllustration() {
 }
 
 function Login() {
+  const navigate = useNavigate()
   // Form input states
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -148,19 +149,19 @@ function Login() {
         password,
       })
 
-      // Store JWT token according to Remember Me preference
-      const storage = rememberMe ? localStorage : sessionStorage
-      if (data.token) {
-        storage.setItem('smartfix_token', data.token)
-      }
-      if (data.user) {
-        storage.setItem('smartfix_user', JSON.stringify(data.user))
+      // Store JWT token and user details according to Remember Me preference
+      if (data.token && data.user) {
+        saveAuthData(data.token, data.user, rememberMe)
       }
 
       setStatusMessage({
         type: 'success',
-        text: `Welcome back, ${data.user?.name || email.trim()}! Login successful.`,
+        text: `Welcome back, ${data.user?.name || email.trim()}! Redirecting to your dashboard...`,
       })
+
+      setTimeout(() => {
+        navigate('/dashboard', { replace: true })
+      }, 800)
     } catch (error) {
       setStatusMessage({
         type: 'error',

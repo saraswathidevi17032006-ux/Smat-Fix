@@ -7,6 +7,7 @@ const mongoose = require('mongoose');
 
 const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
+const reportRoutes = require('./routes/reportRoutes');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
 // Load environment variables from .env
@@ -63,8 +64,9 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Authentication routes
+// Authentication & problem reporting routes
 app.use('/api/auth', authRoutes);
+app.use('/api/reports', reportRoutes);
 
 // In single-service production builds, serve the built React app if frontend/dist exists
 const frontendDistPath = path.resolve(__dirname, '../frontend/dist');

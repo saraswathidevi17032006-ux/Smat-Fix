@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { clearAuthData, loadSavedUser } from './api/apiClient.js'
+import { clearAuthData, createReport, getMyReports, loadSavedUser } from './api/apiClient.js'
 import './Dashboard.css'
 
 const SERVICES = [
@@ -67,19 +67,135 @@ const STATS = [
     icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> },
 ]
 
+const CATEGORY_LABELS = {
+  electrical: 'Electrical',
+  plumbing: 'Plumbing',
+  road: 'Road Damage',
+  garbage: 'Garbage',
+  other: 'Other Issues',
+}
+
 function Dashboard() {
   const navigate = useNavigate()
   // Initialize directly from storage to avoid calling setState inside useEffect
   const [user] = useState(() => loadSavedUser())
 
+  // Reports state fetched from MongoDB Atlas
+  const [reports, setReports] = useState([])
+  const [loadingReports, setLoadingReports] = useState(true)
+
+  // Report modal state
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [category, setCategory] = useState('electrical')
+  const [title, setTitle] = useState('')
+  const [location, setLocation] = useState('')
+  const [description, setDescription] = useState('')
+  const [priority, setPriority] = useState('Medium')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formFeedback, setFormFeedback] = useState(null)
+
   useEffect(() => {
     document.title = 'Dashboard – Smart Fix'
+    let active = true
+
+    async function fetchReports() {
+      try {
+        const data = await getMyReports()
+        if (active && Array.isArray(data.reports)) {
+          setReports(data.reports)
+        }
+      } catch {
+        // Keep empty list if backend is unreachable
+      } finally {
+        if (active) {
+          setLoadingReports(false)
+        }
+      }
+    }
+
+    fetchReports()
+    return () => {
+      active = false
+    }
   }, [])
+
+  function openReportModal(selectedCategory = 'electrical') {
+    setCategory(selectedCategory)
+    setFormFeedback(null)
+    setIsModalOpen(true)
+  }
+
+  function closeReportModal() {
+    if (isSubmitting) return
+    setIsModalOpen(false)
+    setFormFeedback(null)
+  }
+
+  async function handleReportSubmit(event) {
+    event.preventDefault()
+    setFormFeedback(null)
+
+    if (!title.trim() || !location.trim() || !description.trim()) {
+      setFormFeedback({
+        type: 'error',
+        text: 'Please fill in issue title, location, and description.',
+      })
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const data = await createReport({
+        category,
+        title: title.trim(),
+        location: location.trim(),
+        description: description.trim(),
+        priority,
+      })
+
+      if (data.report) {
+        setReports((prev) => [data.report, ...prev])
+      }
+
+      setTitle('')
+      setLocation('')
+      setDescription('')
+      setPriority('Medium')
+      setFormFeedback({
+        type: 'success',
+        text: data.message || 'Problem report submitted successfully!',
+      })
+
+      setTimeout(() => {
+        setIsModalOpen(false)
+        setFormFeedback(null)
+      }, 1000)
+    } catch (error) {
+      setFormFeedback({
+        type: 'error',
+        text: error.message || 'Unable to submit your report. Please try again.',
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   function handleLogout() {
     clearAuthData()
     navigate('/')
   }
+
+  const totalCount = reports.length
+  const inProgressCount = reports.filter((r) => r.status === 'In Progress').length
+  const resolvedCount = reports.filter((r) => r.status === 'Resolved').length
+  const pendingCount = reports.filter((r) => r.status === 'Pending').length
+
+  const dynamicStats = [
+    { ...STATS[0], value: String(totalCount) },
+    { ...STATS[1], value: String(inProgressCount) },
+    { ...STATS[2], value: String(resolvedCount) },
+    { ...STATS[3], label: 'Pending', value: String(pendingCount) },
+  ]
 
   const initials = user?.name
     ? user.name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
@@ -125,7 +241,7 @@ function Dashboard() {
             <p>You are logged in as a {user?.role || 'citizen'}. Report a maintenance issue or track your existing reports below.</p>
           </div>
           <div className="dashboard-welcome-actions">
-            <button type="button" className="dashboard-btn-primary" onClick={() => alert('Report a Problem feature coming in the next phase!')}>
+            <button type="button" className="dashboard-btn-primary" onClick={() => openReportModal('electrical')}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
@@ -137,7 +253,7 @@ function Dashboard() {
 
         {/* Stats */}
         <div className="dashboard-stats-row">
-          {STATS.map((s) => (
+          {dynamicStats.map((s) => (
             <div key={s.label} className="dashboard-stat-card">
               <div className={`dashboard-stat-icon ${s.iconColor}`}>{s.icon}</div>
               <div>
@@ -152,7 +268,19 @@ function Dashboard() {
         <h2 className="dashboard-section-heading">Report a Service Issue</h2>
         <div className="dashboard-services-grid">
           {SERVICES.map((s) => (
-            <div key={s.id} className="dashboard-service-card">
+            <div
+              key={s.id}
+              className="dashboard-service-card"
+              onClick={() => openReportModal(s.id)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  openReportModal(s.id)
+                }
+              }}
+            >
               <div className="dashboard-service-icon">{s.icon}</div>
               <div>
                 <p className="dashboard-service-name">{s.name}</p>
@@ -161,13 +289,51 @@ function Dashboard() {
               <button
                 type="button"
                 className="dashboard-service-btn"
-                onClick={() => alert(`${s.name} reporting form coming in the next phase!`)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openReportModal(s.id)
+                }}
               >
                 Report {s.name} <span aria-hidden="true">→</span>
               </button>
             </div>
           ))}
         </div>
+
+        {/* Submitted Reports List */}
+        <h2 className="dashboard-section-heading">Your Submitted Reports</h2>
+        {loadingReports ? (
+          <div className="dashboard-empty-reports">Loading your reports...</div>
+        ) : reports.length === 0 ? (
+          <div className="dashboard-empty-reports">
+            <p>You haven&apos;t submitted any problem reports yet.</p>
+            <button type="button" className="dashboard-btn-primary" onClick={() => openReportModal('electrical')}>
+              Submit Your First Report
+            </button>
+          </div>
+        ) : (
+          <div className="dashboard-reports-list">
+            {reports.map((report) => (
+              <article key={report._id} className="dashboard-report-card">
+                <div className="dashboard-report-top">
+                  <span className="dashboard-report-category">
+                    {CATEGORY_LABELS[report.category] || report.category}
+                  </span>
+                  <span className={`dashboard-report-status status-${report.status.toLowerCase().replace(/\s+/g, '-')}`}>
+                    {report.status}
+                  </span>
+                </div>
+                <h3 className="dashboard-report-title">{report.title}</h3>
+                <p className="dashboard-report-location">{report.location}</p>
+                <p className="dashboard-report-desc">{report.description}</p>
+                <div className="dashboard-report-meta">
+                  <span>Priority: <strong>{report.priority}</strong></span>
+                  <span>{new Date(report.createdAt).toLocaleDateString()}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
 
         {/* Profile */}
         {user && (
@@ -185,6 +351,120 @@ function Dashboard() {
           </>
         )}
       </main>
+
+      {/* Report a Problem Modal */}
+      {isModalOpen && (
+        <div
+          className="dashboard-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="report-modal-title"
+          onClick={closeReportModal}
+        >
+          <div className="dashboard-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="dashboard-modal-header">
+              <div>
+                <span className="dashboard-modal-badge">Smart Fix Ticket</span>
+                <h3 id="report-modal-title">Report a Problem</h3>
+              </div>
+              <button
+                type="button"
+                className="dashboard-modal-close"
+                aria-label="Close modal"
+                onClick={closeReportModal}
+              >
+                &times;
+              </button>
+            </div>
+
+            {formFeedback && (
+              <div className={`dashboard-form-alert ${formFeedback.type}`} role="alert">
+                {formFeedback.text}
+              </div>
+            )}
+
+            <form className="dashboard-report-form" onSubmit={handleReportSubmit}>
+              <div className="dashboard-form-row">
+                <div className="dashboard-form-group">
+                  <label htmlFor="report-category">Category</label>
+                  <select
+                    id="report-category"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    disabled={isSubmitting}
+                  >
+                    {SERVICES.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="dashboard-form-group">
+                  <label htmlFor="report-priority">Priority</label>
+                  <select
+                    id="report-priority"
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value)}
+                    disabled={isSubmitting}
+                  >
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="dashboard-form-group">
+                <label htmlFor="report-title">Issue Title</label>
+                <input
+                  id="report-title"
+                  type="text"
+                  placeholder="e.g., Broken streetlight near main gate"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  disabled={isSubmitting}
+                  required
+                />
+              </div>
+
+              <div className="dashboard-form-group">
+                <label htmlFor="report-location">Location</label>
+                <input
+                  id="report-location"
+                  type="text"
+                  placeholder="e.g., 2nd Cross Street, Ward 4"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  disabled={isSubmitting}
+                  required
+                />
+              </div>
+
+              <div className="dashboard-form-group">
+                <label htmlFor="report-description">Description</label>
+                <textarea
+                  id="report-description"
+                  rows="3"
+                  placeholder="Describe the issue clearly so the maintenance team can resolve it quickly..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  disabled={isSubmitting}
+                  required
+                />
+              </div>
+
+              <div className="dashboard-modal-actions">
+                <button type="button" className="dashboard-btn-secondary" onClick={closeReportModal} disabled={isSubmitting}>
+                  Cancel
+                </button>
+                <button type="submit" className="dashboard-btn-primary" disabled={isSubmitting}>
+                  {isSubmitting ? 'Submitting...' : 'Submit Report'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <footer className="dashboard-footer">
         <p>&copy; {new Date().getFullYear()} Smart Fix. All rights reserved.</p>

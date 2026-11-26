@@ -566,29 +566,36 @@ function Footer() {
 
 // Existing Home Page Component
 function HomePage() {
-  // Stores the name of a clicked button (e.g. "Register", "Report a Problem")
-  // so we can show a helpful preview dialog before the backend is connected.
+  const navigate = useNavigate()
   const [activeModal, setActiveModal] = useState('')
 
   useEffect(() => {
     document.title = 'Smart Fix – Smart Problem Reporting and Resolution System'
   }, [])
 
+  const handleActionClick = (actionName) => {
+    if (loadSavedToken()) {
+      navigate('/dashboard')
+      return
+    }
+    setActiveModal(actionName)
+  }
+
   return (
     <div className="app-container">
-      <Navbar onActionClick={setActiveModal} />
+      <Navbar />
 
       <main>
-        <HeroSection onActionClick={setActiveModal} />
+        <HeroSection onActionClick={handleActionClick} />
         <AboutSection />
-        <ServicesSection onActionClick={setActiveModal} />
+        <ServicesSection onActionClick={handleActionClick} />
         <HowItWorksSection />
-        <ContactSection onActionClick={setActiveModal} />
+        <ContactSection onActionClick={handleActionClick} />
       </main>
 
       <Footer />
 
-      {/* Simple Frontend Preview Modal */}
+      {/* Prompt unauthenticated users to log in or register before reporting */}
       {activeModal && (
         <div
           className="modal-backdrop"
@@ -598,19 +605,41 @@ function HomePage() {
           onClick={() => setActiveModal('')}
         >
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <span className="modal-badge">Frontend Preview</span>
+            <span className="modal-badge">Sign In Required</span>
             <h3 id="modal-title">{activeModal}</h3>
             <p>
-              This is the landing page preview for <strong>{activeModal}</strong>. Interactive forms and backend
-              database connectivity will be added in the next phase of the Smart Fix project.
+              Please log in or create a Smart Fix account to submit your <strong>{activeModal}</strong> and track
+              live repair updates on your dashboard.
             </p>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => setActiveModal('')}
-            >
-              Got It
-            </button>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setActiveModal('')
+                  navigate('/login')
+                }}
+              >
+                Login
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => {
+                  setActiveModal('')
+                  navigate('/register')
+                }}
+              >
+                Register
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => setActiveModal('')}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
