@@ -25,7 +25,7 @@ export async function apiRequest(endpoint, options = {}) {
     })
   } catch {
     throw new Error(
-      'Unable to connect to the Smart Fix backend. Make sure the backend is running on http://localhost:5000.'
+      'Unable to connect to the Smart Fix server. Please try again in a moment.'
     )
   }
 
